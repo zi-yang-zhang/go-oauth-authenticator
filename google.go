@@ -38,7 +38,7 @@ type GoogleAuthenticator struct {
 func (authenticator *GoogleAuthenticator) AuthenticateMiddleware(args interface{}) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authorization := c.GetHeader("Authorization")
-		claims, ve := authenticator.GetClaims(authorization, args)
+		claims, ve := authenticator.GetClaims(authorization, args.(string))
 
 		if ve == nil {
 			c.Set(jwtKey, claims)
@@ -55,7 +55,7 @@ func (authenticator *GoogleAuthenticator) AuthenticateMiddleware(args interface{
 }
 
 //GetClaims validates and gets the claims info from jwt
-func (authenticator *GoogleAuthenticator) GetClaims(authorization string, args interface{}) (interface{}, error) {
+func (authenticator *GoogleAuthenticator) GetClaims(authorization string, clientID string) (interface{}, error) {
 	jwtString := strings.Split(authorization, " ")[1]
 	jwtParser := new(jwt.Parser)
 	jwtParser.SkipClaimsValidation = true
@@ -65,7 +65,7 @@ func (authenticator *GoogleAuthenticator) GetClaims(authorization string, args i
 	}
 
 	claims := token.Claims.(*GoogleJWTClaims)
-	ve := claims.validWithClientID(args.(string))
+	ve := claims.validWithClientID(clientID)
 	return claims, ve
 }
 
