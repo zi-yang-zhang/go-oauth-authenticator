@@ -11,12 +11,17 @@ import (
 	"strings"
 
 	jwt "github.com/dgrijalva/jwt-go"
-	"github.com/gin-gonic/gin"
+)
+
+const (
+	GoogleCertURL             = "https://www.googleapis.com/oauth2/v1/certs"
+	GoogleIssuerWithScheme    = "https://accounts.google.com"
+	GoogleIssuerWithoutScheme = "accounts.google.com"
 )
 
 //GoogleJWTClaims is the google jwt claim
 type GoogleJWTClaims struct {
-	*jwt.StandardClaims
+	jwt.StandardClaims
 	Email         string `json:"email"`
 	EmailVerified bool   `json:"email_verified"`
 	FamilyName    string `json:"family_name"`
@@ -26,36 +31,29 @@ type GoogleJWTClaims struct {
 	Picture       string `json:"picture"`
 }
 
-type googleCerts struct {
-	Keys map[string]string
-}
-
 //GoogleAuthenticator provides gin Middleware for validating google oauth2 token
 type GoogleAuthenticator struct {
+	clientID string
 }
 
-//AuthenticateMiddleware is the gin Middleware for validating google oauth2 token
-func (authenticator *GoogleAuthenticator) AuthenticateMiddleware(args interface{}) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		authorization := c.GetHeader("Authorization")
-		claims, ve := authenticator.GetClaims(authorization, args.(string))
+func (c *GoogleJWTClaims) GetEmail() string {
+	return c.Email
+}
 
-		if ve == nil {
-			c.Set(jwtKey, claims)
-			c.Next()
-		} else {
-			c.AbortWithStatusJSON(401, gin.H{
-				"error": ve.Error(),
-			})
-			return
-		}
+func (c *GoogleJWTClaims) GetId() string {
+	return c.Subject
+}
 
-	}
+func (c *GoogleJWTClaims) GetClaims() interface{} {
+	return c
+}
 
+func (c *GoogleJWTClaims) GetIssuer() string {
+	return IssuerGoogle
 }
 
 //GetClaims validates and gets the claims info from jwt
-func (authenticator *GoogleAuthenticator) GetClaims(authorization string, clientID string) (interface{}, error) {
+func (authenticator *GoogleAuthenticator) GetClaims(authorization string) (AuthenticationInfo, error) {
 	jwtString := strings.Split(authorization, " ")[1]
 	jwtParser := new(jwt.Parser)
 	jwtParser.SkipClaimsValidation = true
@@ -65,13 +63,14 @@ func (authenticator *GoogleAuthenticator) GetClaims(authorization string, client
 	}
 
 	claims := token.Claims.(*GoogleJWTClaims)
-	ve := claims.validWithClientID(clientID)
+	ve := claims.validWithClientID(authenticator.clientID)
+
 	return claims, ve
 }
 
 func (authenticator *GoogleAuthenticator) getKey() jwt.Keyfunc {
 	return func(token *jwt.Token) (interface{}, error) {
-		response, err := http.Get("https://www.googleapis.com/oauth2/v1/certs")
+		response, err := http.Get(GoogleCertURL)
 		if err != nil {
 			log.Fatal("Cannot get certificate from google: ", err)
 			panic(err)
@@ -101,14 +100,14 @@ func (authenticator *GoogleAuthenticator) getKey() jwt.Keyfunc {
 
 }
 
-func (g *GoogleJWTClaims) validWithClientID(aud string) error {
-	err := g.valid()
+func (c *GoogleJWTClaims) validWithClientID(aud string) error {
+	err := c.valid()
 	vErr := new(jwt.ValidationError)
 	if err != nil {
 		vErr = err.(*jwt.ValidationError)
 	}
-	if !g.StandardClaims.VerifyAudience(aud, true) {
-		vErr.Inner = errors.New("Wrong google clientId")
+	if !c.StandardClaims.VerifyAudience(aud, true) {
+		vErr.Inner = errors.New("wrong google clientId")
 		vErr.Errors |= jwt.ValidationErrorAudience
 	}
 	if vErr.Errors == 0 {
@@ -117,15 +116,15 @@ func (g *GoogleJWTClaims) validWithClientID(aud string) error {
 	return vErr
 }
 
-func (g *GoogleJWTClaims) valid() error {
-	err := g.StandardClaims.Valid()
+func (c *GoogleJWTClaims) valid() error {
+	err := c.StandardClaims.Valid()
 	vErr := new(jwt.ValidationError)
 	if err != nil {
 		vErr = err.(*jwt.ValidationError)
 	}
 
-	if !g.StandardClaims.VerifyIssuer("accounts.google.com", true) && !g.StandardClaims.VerifyIssuer("https://accounts.google.com", true) {
-		vErr.Inner = errors.New("Not google issued token")
+	if !c.StandardClaims.VerifyIssuer(GoogleIssuerWithoutScheme, true) && !c.StandardClaims.VerifyIssuer(GoogleIssuerWithScheme, true) {
+		vErr.Inner = errors.New("not google issued token")
 		vErr.Errors |= jwt.ValidationErrorIssuer
 	}
 

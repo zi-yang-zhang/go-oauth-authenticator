@@ -1,10 +1,17 @@
 # go-oauth-authenticator
 Go OAuth authenticator
 
-## Google OAuth authenticator
+Supports Google JWT token Authentication
 
-use `GoogleAuthenticator` to authenticate google oauth token.
+Need to pass in
+```
+{
+  google:<clientID>
+}
+```
+to
+```New(authParams map[string]interface{})``` for creating `AuthenticationProvider`.
 
-`GoogleAuthenticator.AuthenticateMiddleware(clientID string)` is a gin middleware that validates the oauth token and sets claims in gin.Context
+Customized `Authenticator` can be added through `AuthenticationProvider.Authenticators`.
 
-`GoogleAuthenticator.GetClaims(authorization string, clientID string)` validates and return parsed claims
+Parsed JWT info(`AuthenticationInfo`) is returned through `AuthenticationProvider.Authenticate(authorization_header)`
